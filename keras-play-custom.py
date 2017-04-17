@@ -57,7 +57,7 @@ image_paths = [
 ]
 
 heatmaps = []
-# vis_images = []
+vis_images = []
 
 # def pred_class_eval(score):
 #     if score > 0.5:
@@ -71,19 +71,23 @@ def get_cat_dog_label(pred_class):
     elif pred_class==0:
         return 'cat'
         
-# path = image_paths[0]
-# seed_img = utils.load_img(path, target_size=(224, 224))
+path = image_paths[3]
+seed_img = utils.load_img(path, target_size=(224, 224))
 
-# pred_class = np.argmax(model.predict(np.array([img_to_array(seed_img)])))
+pred_class = np.argmax(model.predict(np.array([img_to_array(seed_img)])))
 # pred_otherwise = np.argmin(model.predict(np.array([img_to_array(seed_img)])))
 # pred_class_vgg = np.argmax(model_vgg.predict(np.array([img_to_array(seed_img)])))
 
-# heatmap = visualize_cam(model, layer_idx, [pred_class], seed_img, text=get_cat_dog_label(pred_class))
+heatmap = visualize_cam(model, layer_idx, [pred_class], seed_img, text=get_cat_dog_label(pred_class))
 # heatmap_otherwise = visualize_cam(model, layer_idx, [pred_otherwise], seed_img, text="otherwise")
 # heatmap_vgg = visualize_cam(model_vgg, vgg_layer_idx, [pred_class_vgg], seed_img, text=utils.get_imagenet_label(pred_class_vgg))
-# heatmaps.append(heatmap)
+heatmaps.append(heatmap)
 # heatmaps.append(heatmap_otherwise)
 # heatmaps.append(heatmap_vgg)
+
+# Generate three different images of the same output index.
+# vis_images = [visualize_activation(model, layer_idx, filter_indices=idx, text=str(idx), max_iter=500) for idx in [1, 1, 1]]
+# vis_images.append(vis_image)
 
 for path in image_paths:
     
