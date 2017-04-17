@@ -1,0 +1,5 @@
+.DS_Store
+data
+*.h5
+*.json
+
