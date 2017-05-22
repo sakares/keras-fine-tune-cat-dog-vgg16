@@ -57,7 +57,7 @@ train_data_dir = 'data/train'
 validation_data_dir = 'data/validation'
 nb_train_samples = 2000
 nb_validation_samples = 800
-epochs = 50
+epochs = 4
 batch_size = 16
 
 if K.image_data_format() == 'channels_first':
@@ -65,56 +65,23 @@ if K.image_data_format() == 'channels_first':
 else:
     input_shape = (img_width, img_height, 3)
 
-def preprocess_input_inception_v3(x):
-    """Wrapper around keras.applications.vgg16.preprocess_input()
-    to make it compatible for use with keras.preprocessing.image.ImageDataGenerator's
-    `preprocessing_function` argument.
-    
-    Parameters
-    ----------
-    x : a numpy 3darray (a single image to be preprocessed)
-    
-    Note we cannot pass keras.applications.vgg16.preprocess_input()
-    directly to to keras.preprocessing.image.ImageDataGenerator's
-    `preprocessing_function` argument because the former expects a
-    4D tensor whereas the latter expects a 3D tensor. Hence the
-    existence of this wrapper.
-    
-    Returns a numpy 3darray (the preprocessed image).
-    
-    """
-    normalized = x.astype("float") / 255.0 
-    X = np.expand_dims(normalized, axis=0)
-    X = preprocess_input(X)
-    return X[0]
+# inception_v3 = InceptionV3(weights='imagenet')
 
+# x = inception_v3.get_layer('avg_pool').output
 
-# inceptionV3 = InceptionV3(weights='imagenet')
+base_model = InceptionV3(weights='imagenet', include_top=False)
 
-# x  = inceptionV3.get_layer('avg_pool').output
-# prediction = Dense(2, activation='softmax', name='predictions')(x)
+# add a global spatial average pooling layer
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+# let's add a fully-connected layer
+x = Dense(1024, activation='relu', name='fc1')(x)
 
-# model = Model(inputs=inceptionV3.input, outputs=prediction)
-
-inception_v3 = InceptionV3(weights='imagenet')
-
-x = inception_v3.get_layer('avg_pool').output
 prediction = Dense(2, activation='softmax', name='predictions')(x)
 
-model = Model(inputs=inception_v3.input, outputs=prediction)
-
-# first: train only the top layers (which were randomly initialized)
-# i.e. freeze all convolutional InceptionV3 layers
-# for layer in base_model.layers:
-#     layer.trainable = False
-
-
-
-# compile the model (should be done *after* setting layers to non-trainable)
-# model.compile(optimizer='rmsprop', loss='categorical_crossentropy')
+model = Model(inputs=base_model.input, outputs=prediction)
 
 # Freeze All Layers Except Bottleneck Layers for Fine-Tuning
-
 for layer in model.layers:
     if layer.name in ['predictions']:
         continue
@@ -146,16 +113,16 @@ validation_generator = validation_datagen.flow_from_directory(directory='data/va
 # # compile the model (should be done *after* setting layers to non-trainable)
 model.compile(optimizer='rmsprop', loss='categorical_crossentropy', metrics=['accuracy'])
 # from keras.optimizers import SGD
-# model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy')
+# model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy', metrics=['accuracy'])
 
 model.fit_generator(
         train_generator,
-        steps_per_epoch=16,
-        # steps_per_epoch=2000 // batch_size,
-        epochs=1,
+        # steps_per_epoch=16,
+        steps_per_epoch=2000 // batch_size,
+        epochs=10,
         validation_data=validation_generator,
-        # validation_steps=800 // batch_size)
-        validation_steps=32) #,
+        validation_steps=800 // batch_size)
+        # validation_steps=32) #,
         # callbacks=callbacks_list)
 
 # Save trained weight                   
@@ -165,6 +132,44 @@ model_json_final = model.to_json()
 with open("inception_v3_tf_cat_dog_top_layer.json", "w") as json_file:
     json_file.write(model_json_final)
     
+# at this point, the top layers are well trained and we can start fine-tuning
+# convolutional layers from inception V3. We will freeze the bottom N layers
+# and train the remaining top layers.
+
+# let's visualize layer names and layer indices to see how many layers
+# we should freeze:
+for i, layer in enumerate(base_model.layers):
+   print(i, layer.name)
+
+# we chose to train the top 2 inception blocks, i.e. we will freeze
+# the first 172 layers and unfreeze the rest:
+for layer in model.layers[:172]:
+   layer.trainable = False
+for layer in model.layers[172:]:
+   layer.trainable = True
+
+# we need to recompile the model for these modifications to take effect
+# we use SGD with a low learning rate
+from keras.optimizers import SGD
+model.compile(optimizer=SGD(lr=0.001, momentum=0.9), loss='categorical_crossentropy', metrics=['accuracy'])
+
+# we train our model again (this time fine-tuning the top 2 inception blocks
+# alongside the top Dense layers
+model.fit_generator(
+        train_generator,
+        # steps_per_epoch=16,
+        steps_per_epoch=2000 // batch_size,
+        epochs=10,
+        validation_data=validation_generator,
+        validation_steps=800 // batch_size)
+
+
+# Save trained weight                   
+model.save_weights('inception_v3_tf_cat_dog_final.h5')
+
+model_json_final = model.to_json()
+with open("inception_v3_tf_cat_dog_final.json", "w") as json_file:
+    json_file.write(model_json_final)
 
 
 from IPython.display import display
